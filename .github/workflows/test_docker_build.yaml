@@ -12,6 +12,13 @@ jobs:
     permissions:
       contents: read
 
+  build_docker:
+    needs: [build]
+    uses: ./.github/workflows/_build_docker.yaml
+    permissions:
+      contents: read
+      packages: write
+
   # build-docker:
   #   uses: ./.github/workflows/_build_docker.yaml
   #   with:
