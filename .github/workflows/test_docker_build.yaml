@@ -12,11 +12,11 @@ jobs:
     permissions:
       contents: read
 
-  # build_docker_but_not_push:
-  #   needs: [build]
-  #   uses: ./.github/workflows/_build_docker.yaml
-  #   permissions:
-  #     contents: read
+  build_docker_but_not_push:
+    needs: [build]
+    uses: ./.github/workflows/_build_docker.yaml
+    permissions:
+      contents: read
 
   build_docker_and_push:
     needs: [build]

@@ -142,7 +142,7 @@ enabled=1\
 	&& ldconfig \
     # We mark all unecessary packages to be removed while preserving the user installed packages.
     # We must exclude protected packages because we couldn't remove it.
-	&& dnf list installed --exclude "$(cat /etc/dnf/protected.d/*.conf)" | tail -n +2 | cut -d' ' -f1 | xargs -r dnf mark remove > /dev/null \
+	&& dnf list installed | tail -n +2 | cut -d' ' -f1 | xargs -r dnf mark remove > /dev/null \
     && [ -z "$USER_MANUAL_INSTALLED" ] || dnf mark install $USER_MANUAL_INSTALLED \
     # Look for share libraries that are used by looking through the executables in /usr/local.
     # Reference:
@@ -188,7 +188,7 @@ RUN : \
 	&& dnf install -y wget findutils \
 	&& wget -O get-pip.py "$PYTHON_GET_PIP_URL" \
 	&& echo "$PYTHON_GET_PIP_SHA256 *get-pip.py" | sha256sum -c - \
-	&& dnf list installed --exclude "$(cat /etc/dnf/protected.d/*.conf)" | tail -n +2 | cut -d' ' -f1 | xargs -r dnf mark remove > /dev/null \
+	&& dnf list installed | tail -n +2 | cut -d' ' -f1 | xargs -r dnf mark remove > /dev/null \
 	&& [ -z "$USER_MANUAL_INSTALLED" ] || dnf mark install $USER_MANUAL_INSTALLED > /dev/null \
 	&& dnf autoremove -y \
 	&& python get-pip.py \
@@ -241,8 +241,12 @@ RUN : \
     && cmake -S . -B build -DSOUFFLE_DOMAIN_64BIT=ON -DCMAKE_INSTALL_PREFIX="/usr/local" \
     && nproc="$(nproc)" \
     && cmake --build build --target install -j "$nproc" \
-    && dnf list installed --exclude "$(cat /etc/dnf/protected.d/*.conf)" | tail -n +2 | cut -d' ' -f1 | xargs -r dnf mark remove > /dev/null \
+    && echo $USER_MANUAL_INSTALLED \
+    && dnf list installed | tail -n +2 | cut -d' ' -f1 | xargs -r dnf mark remove > /dev/null \
 	&& [ -z "$USER_MANUAL_INSTALLED" ] || dnf mark install $USER_MANUAL_INSTALLED > /dev/null \
+    # We exclude systemd-udev because one of the build dependencies for Souffle pull this protected package.
+    # This command make sure that it won't break if systemd-udev is not pulled in the future.
+    && (dnf list installed systemd-udev && dnf mark install systemd-udev || true) \
 	&& dnf autoremove -y \
     && cd / \
     && rm -rf /souffle-src \
@@ -251,9 +255,10 @@ RUN : \
     && rm -rf /var/cache/dnf \
     && souffle --version
 
-# INSTALLING MACARON RUNTIME DEPENDENCIES
+# INSTALLING MACARON RUNTIME DEPENDENCIES AND OTHER UTILITIES PACKAGES.
 #   - java-17-openjdk-devel
 #   - git
+#   - findutils
 ENV JAVA_HOME="/usr/lib/jvm/java-17-openjdk"
 
 ENV PATH=$JAVA_HOME/bin:$PATH
@@ -264,6 +269,7 @@ RUN : \
     && dnf install -y \
         https://download.oracle.com/java/17/latest/jdk-17_linux-x64_bin.rpm \
         git \
+        findutils \
     && dnf clean all \
     && rm -rf /var/cache/yum \
     && rm -rf /var/cache/dnf

@@ -16,7 +16,6 @@ on:
 
 env:
   IMAGE_NAME: ghcr.io/tromai/macaron
-  DIST_PATH: download/${{ inputs.artifact_name }}/dist
 
 jobs:
   build-docker:
