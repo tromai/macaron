@@ -46,13 +46,7 @@ ENV PACKAGE_PATH=$HOME/.venv/lib/python3.11/site-packages/macaron
 # the Docker container.
 RUN : \
     && groupadd --gid 43147 macaron \
-    && useradd --uid 43147 --create-home --gid 43147 macaron \
-    && dnf upgrade -y \
-    && dnf install -y \
-        git \
-    && dnf clean all -y \
-    && rm -rf /var/cache/yum \
-    && rm -rf /var/cache/dnf
+    && useradd --uid 43147 --create-home --gid 43147 macaron
 
 WORKDIR $HOME
 

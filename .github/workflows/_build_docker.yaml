@@ -4,13 +4,15 @@
 name: Build and push Docker image
 on:
   workflow_call:
+    inputs:
+      release-tag:
+        description: The release tag to push the Docker image
+        required: false
+        type: string
     # outputs:
     #   artifacts-sha256:
     #     description: The hash of the Docker image
     #     value: ${{ jobs.build-docker.outputs.image-digest }}
-permissions:
-  contents: read
-  packages: write
 
 env:
   IMAGE_NAME: ghcr.io/tromai/macaron
@@ -31,17 +33,9 @@ jobs:
     - name: Download artifact
       uses: actions/download-artifact@9782bd6a9848b53b110e712e20e42d89988822b7 # v3.0.1
       with:
-        path: download
+        path: dist
 
-    - name: Check downloaded artifact
-      run: ls -R
-      working-directory: ./
-
-    - name: Log in to GitHub Container Registry
-      run: docker login ghcr.io --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Build and push Macaron final image
+    - name: Build the Docker image
       run: |
-        WHEEL_PATH=$(find ./download/ -depth -type f -name 'macaron-*.whl' | head -n 1)
-        docker build -t ${{ env.IMAGE_NAME }}:staging --build-arg WHEEL_PATH="$WHEEL_PATH" -f docker/Dockerfile.final .
-        docker push ${{ env.IMAGE_NAME }}:staging
+        docker login ghcr.io --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
+        ./scripts/dev_scripts/build_push_docker.sh ${{ inputs.release-tag }}
