@@ -4,9 +4,6 @@
 name: Build Macaron base image
 on:
   workflow_dispatch:
-  push:
-    branches:
-    - tromai/add-docker-images
 
 permissions:
   contents: read

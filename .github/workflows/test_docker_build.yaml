@@ -7,22 +7,33 @@ on:
     - tromai/add-docker-images
 
 jobs:
-  build:
-    uses: ./.github/workflows/_build.yaml
+  docker_imabe_sbom:
+    name: Release the Docker image sbom
     permissions:
-      contents: read
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      SYFT_BIN: ${{ github.workspace }}/bin
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      with:
+        fetch-depth: 0
 
-  build_docker_but_not_push:
-    needs: [build]
-    uses: ./.github/workflows/_build_docker.yaml
-    permissions:
-      contents: read
+    - name: Log in to GitHub Container Registry
+      run: docker login ghcr.io --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
 
-  build_docker_and_push:
-    needs: [build]
-    uses: ./.github/workflows/_build_docker.yaml
-    with:
-      release-tag: experimental
-    permissions:
-      contents: read
-      packages: write
+    - name: Install Syft
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b ${{ env.SYFT_BIN }} v0.74.1
+        ${{ env.SYFT_BIN }}/syft --version
+
+    - name: Generate sbom
+      run: |
+        ${{ env.SYFT_BIN }}/syft ghcr.io/tromai/macaron-base -o cyclonedx-json=./macaron-base-sbom.json
+
+    - name: Push to release
+      run: |
+        gh release create 0.0.1-experimental --notes "Experimental"
+        gh release upload 0.0.1-experimental ./macaron-base-sbom.json
