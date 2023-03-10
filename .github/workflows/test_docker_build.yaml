@@ -21,8 +21,8 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Log in to GitHub Container Registry
-      run: docker login ghcr.io --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
+    # - name: Log in to GitHub Container Registry
+    #   run: docker login ghcr.io --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Syft
       run: |
@@ -35,5 +35,5 @@ jobs:
 
     - name: Push to release
       run: |
-        gh release create 0.0.1-experimental --notes "Experimental"
-        gh release upload 0.0.1-experimental ./macaron-base-sbom.json
+        gh release create 0.0.1-experimental2 --notes "Experimental"
+        gh release upload 0.0.1-experimental2 ./macaron-base-sbom.json
