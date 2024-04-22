@@ -19,7 +19,7 @@ from macaron import __version__
 from macaron.config.global_config import global_config
 from macaron.config.target_config import Configuration
 from macaron.database.database_manager import DatabaseManager, get_db_manager, get_db_session
-from macaron.database.table_definitions import Analysis, Component, Repository
+from macaron.database.table_definitions import Analysis, Component, ProvenanceSubject, Repository
 from macaron.dependency_analyzer import DependencyAnalyzer, DependencyInfo
 from macaron.errors import (
     CloneError,
@@ -332,7 +332,12 @@ class Analyzer:
         # Create the component.
         component = None
         try:
-            component = self.add_component(analysis, analysis_target, existing_records)
+            component = self.add_component(
+                analysis,
+                analysis_target,
+                existing_records,
+                provenance_payload,
+            )
         except PURLNotFoundError as error:
             logger.error(error)
             return Record(
@@ -484,6 +489,7 @@ class Analyzer:
         analysis: Analysis,
         analysis_target: AnalysisTarget,
         existing_records: dict[str, Record] | None = None,
+        provenance_payload: InTotoPayload | None = None,
     ) -> Component:
         """Add a software component if it does not exist in the DB already.
 
@@ -547,18 +553,30 @@ class Analyzer:
                 raise PURLNotFoundError(
                     f"The repository {analysis_target.repo_path} is not available and no PURL is provided from the user."
                 )
-
-            repo_snapshot_purl = PackageURL(
+            purl = PackageURL(
                 type=repository.type,
                 namespace=repository.owner,
                 name=repository.name,
                 version=repository.commit_sha,
             )
-            return Component(purl=str(repo_snapshot_purl), analysis=analysis, repository=repository)
+        else:
+            # If the PURL is available, we always create the software component with it whether the repository is
+            # available or not.
+            purl = analysis_target.parsed_purl
 
-        # If the PURL is available, we always create the software component with it whether the repository is
-        # available or not.
-        return Component(purl=str(analysis_target.parsed_purl), analysis=analysis, repository=repository)
+        component = Component(
+            purl=str(purl),
+            analysis=analysis,
+            repository=repository,
+        )
+
+        if provenance_payload:
+            component.provenance_subject = ProvenanceSubject.from_purl_and_provenance(
+                purl=purl,
+                provenance_payload=provenance_payload,
+            )
+
+        return component
 
     @staticmethod
     def parse_purl(config: Configuration) -> PackageURL | None:
@@ -637,21 +655,12 @@ class Analyzer:
                     "Cannot determine the analysis target: PURL and repository path are missing."
                 )
 
-            case (None, _):
-                # If only the repository path is provided, we will use the user-provided repository path to create the
-                # ``Repository`` instance. Note that if this case happen, the software component will be initialized
-                # with the PURL generated from the ``Repository`` instance (i.e. as a PURL pointing to a git repository
-                # at a specific commit). For example: ``pkg:github.com/org/name@<commit_digest>``.
-                return Analyzer.AnalysisTarget(
-                    parsed_purl=None, repo_path=repo_path_input, branch=input_branch, digest=input_digest
-                )
-
             case (_, ""):
                 # If a PURL but no repository path is provided, we try to extract the repository path from the PURL.
                 # Note that we can't always extract the repository path from any provided PURL.
                 converted_repo_path = None
-                repo: str = ""
-                digest: str = ""
+                repo: str | None = None
+                digest: str | None = None
                 # parsed_purl cannot be None here, but mypy cannot detect that without some extra help.
                 if parsed_purl is not None:
                     if provenance_payload:
@@ -659,17 +668,16 @@ class Analyzer:
                         try:
                             repo, digest = extract_repo_and_commit_from_provenance(provenance_payload)
                         except ProvenanceError as error:
-                            logger.debug("Failed to extract repo and commit from provenance: %s", error)
+                            logger.debug("Failed to extract repo or commit from provenance: %s", error)
 
-                    if repo and digest:
                         return Analyzer.AnalysisTarget(
                             parsed_purl=parsed_purl,
-                            repo_path=repo,
+                            repo_path=repo or "",
                             branch="",
-                            digest=digest,
+                            digest=digest or "",
                         )
 
-                    # The commit was not found from provenance. Proceed with Repo Finder.
+                    # As there is no provenance, use the Repo Finder to find the repo.
                     converted_repo_path = repo_finder.to_repo_path(parsed_purl, available_domains)
                     if converted_repo_path is None:
                         # Try to find repo from PURL
@@ -677,20 +685,46 @@ class Analyzer:
 
                 return Analyzer.AnalysisTarget(
                     parsed_purl=parsed_purl,
-                    repo_path=converted_repo_path or repo,
+                    repo_path=converted_repo_path or repo or "",
                     branch=input_branch,
                     digest=input_digest,
                 )
 
-            case (_, _):
-                # If both the PURL and the repository are provided, we will use the user-provided repository path to
+            case (_, _) | (None, _):
+                # 1. If only the repository path is provided, we will use the user-provided repository path to create the
+                # ``Repository`` instance. Note that if this case happen, the software component will be initialized
+                # with the PURL generated from the ``Repository`` instance (i.e. as a PURL pointing to a git repository
+                # at a specific commit). For example: ``pkg:github.com/org/name@<commit_digest>``.
+                # 2. If both the PURL and the repository are provided, we will use the user-provided repository path to
                 # create the ``Repository`` instance later on. This ``Repository`` instance is attached to the
                 # software component initialized from the user-provided PURL.
+                # For both cases, the digest will be the user input digest if it is provided. If not, it will be taken
+                # from the provenance if the provenance is available.
+                if input_digest:
+                    return Analyzer.AnalysisTarget(
+                        parsed_purl=parsed_purl,
+                        repo_path=repo_path_input,
+                        branch=input_branch,
+                        digest=input_digest,
+                    )
+
+                prov_digest = None
+                if provenance_payload:
+                    try:
+                        _, prov_digest = extract_repo_and_commit_from_provenance(provenance_payload)
+                    except ProvenanceError as error:
+                        logger.debug("Failed to extract commit from provenance: %s", error)
+
                 return Analyzer.AnalysisTarget(
-                    parsed_purl=parsed_purl, repo_path=repo_path_input, branch=input_branch, digest=input_digest
+                    parsed_purl=parsed_purl,
+                    repo_path=repo_path_input,
+                    branch=input_branch,
+                    digest=prov_digest or "",
                 )
 
             case _:
+                # Even though this case is unecessary, it is still put here because mypy cannot type-narrow tuples
+                # correctly (see https://github.com/python/mypy/pull/16905, which was fixed, but not released).
                 raise InvalidAnalysisTargetError(
                     "Cannot determine the analysis target: PURL and repository path are missing."
                 )

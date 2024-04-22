@@ -268,6 +268,15 @@ $RUN_MACARON analyze -purl pkg:private_domain.com/apache/maven -sbom "$SBOM_FILE
 
 check_or_update_expected_output $COMPARE_DEPS $DEP_RESULT $DEP_EXPECTED || log_fail
 
+echo -e "\n----------------------------------------------------------------------------------"
+echo "com.example/nonexistent: Analyzing purl of nonexistent artifact."
+echo -e "----------------------------------------------------------------------------------\n"
+JSON_EXPECTED=$WORKSPACE/tests/e2e/expected_results/purl/maven/com_example_nonexistent/nonexistent.json
+JSON_RESULT=$WORKSPACE/output/reports/maven/com_example/nonexistent/nonexistent.json
+$RUN_MACARON analyze -purl pkg:maven/com.example/nonexistent@1.0.0 --skip-deps || log_fail
+
+check_or_update_expected_output $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED || log_fail
+
 # Analyze micronaut-projects/micronaut-test.
 echo -e "\n=================================================================================="
 echo "Run integration tests with configurations for micronaut-projects/micronaut-test..."
@@ -424,6 +433,17 @@ check_or_update_expected_output $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED ||
 echo -e "\n=================================================================================="
 echo "Run integration tests with local paths for apache/maven..."
 echo -e "==================================================================================\n"
+
+echo -e "\n----------------------------------------------------------------------------------"
+echo "bitbucket.org/snakeyaml/snakeyaml: Analyzing a repository with un-supported git service as local repo without dependency resolution."
+echo -e "----------------------------------------------------------------------------------\n"
+git clone https://bitbucket.org/snakeyaml/snakeyaml $WORKSPACE/output/local_repos/snakeyaml || log_fail
+DEFAULTS_FILE=$WORKSPACE/tests/e2e/defaults/bitbucket_local_repo.ini
+JSON_EXPECTED=$WORKSPACE/tests/e2e/expected_results/snakeyaml/snakeyaml.json
+JSON_RESULT=$WORKSPACE/output/reports/bitbucket_org/snakeyaml/snakeyaml/snakeyaml.json
+$RUN_MACARON -dp $DEFAULTS_FILE -lr $WORKSPACE/output/local_repos analyze -rp snakeyaml -d a34989252e6f59e36a3aaf788a903b7a37a73d33 --skip-deps || log_fail
+
+check_or_update_expected_output $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED || log_fail
 
 echo -e "\n----------------------------------------------------------------------------------"
 echo "apache/maven: Analyzing with the branch name, the commit digest and dependency resolution using cyclonedx maven plugin (default)."
@@ -680,6 +700,30 @@ $RUN_MACARON -dp $DEFAULTS_FILE analyze -pe $EXPECTATION_FILE -rp https://github
 check_or_update_expected_output $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED || log_fail
 
 echo -e "\n----------------------------------------------------------------------------------"
+echo "Test verifying CUE provenance expectation for slsa-verifier with explicitly-provided provenance file"
+echo -e "----------------------------------------------------------------------------------\n"
+JSON_EXPECTED=$WORKSPACE/tests/e2e/expected_results/slsa-verifier/slsa-verifier_explicitly_provided_cue_PASS.json
+JSON_RESULT=$WORKSPACE/output/reports/github_com/slsa-framework/slsa-verifier/slsa-verifier.json
+EXPECTATION_FILE=$WORKSPACE/tests/slsa_analyzer/provenance/expectations/cue/resources/valid_expectations/slsa_verifier_PASS.cue
+DEFAULTS_FILE=$WORKSPACE/tests/e2e/defaults/slsa_verifier.ini
+PROVENANCE_FILE=$WORKSPACE/tests/slsa_analyzer/provenance/resources/valid_provenances/slsa-verifier-linux-amd64.intoto.jsonl
+$RUN_MACARON -dp $DEFAULTS_FILE analyze -pe $EXPECTATION_FILE -pf $PROVENANCE_FILE -rp https://github.com/slsa-framework/slsa-verifier -b main -d fc50b662fcfeeeb0e97243554b47d9b20b14efac --skip-deps || log_fail
+
+check_or_update_expected_output $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED || log_fail
+
+echo -e "\n----------------------------------------------------------------------------------"
+echo "Test verifying CUE provenance expectation for slsa-verifier with explicitly-provided provenance file as a URL link file"
+echo -e "----------------------------------------------------------------------------------\n"
+JSON_EXPECTED=$WORKSPACE/tests/e2e/expected_results/slsa-verifier/slsa-verifier_explicitly_provided_cue_PASS.json
+JSON_RESULT=$WORKSPACE/output/reports/github_com/slsa-framework/slsa-verifier/slsa-verifier.json
+EXPECTATION_FILE=$WORKSPACE/tests/slsa_analyzer/provenance/expectations/cue/resources/valid_expectations/slsa_verifier_PASS.cue
+DEFAULTS_FILE=$WORKSPACE/tests/e2e/defaults/allow_url_link_github.ini
+PROVENANCE_FILE=$WORKSPACE/tests/slsa_analyzer/provenance/resources/valid_provenances/slsa-verifier-linux-amd64.intoto.jsonl
+$RUN_MACARON -dp $DEFAULTS_FILE analyze -pe $EXPECTATION_FILE -pf $PROVENANCE_FILE -rp https://github.com/slsa-framework/slsa-verifier -b main -d fc50b662fcfeeeb0e97243554b47d9b20b14efac --skip-deps || log_fail
+
+check_or_update_expected_output $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED || log_fail
+
+echo -e "\n----------------------------------------------------------------------------------"
 echo "urllib3/urllib3: Analyzing the repo path when automatic dependency resolution is skipped"
 echo "and CUE file is provided as expectation."
 echo -e "----------------------------------------------------------------------------------\n"
@@ -715,6 +759,29 @@ POLICY_EXPECTED=$WORKSPACE/tests/policy_engine/expected_results/micronaut-core/t
 
 $RUN_POLICY -f $POLICY_FILE -d "$WORKSPACE/output/macaron.db" || log_fail
 check_or_update_expected_output $COMPARE_POLICIES $POLICY_RESULT $POLICY_EXPECTED || log_fail
+
+echo -e "\n----------------------------------------------------------------------------------"
+echo "behnazh-w/example-maven-app as a local repository"
+echo "Test Witness provenance as an input, Cue expectation validation, Policy CLI and VSA generation."
+echo -e "----------------------------------------------------------------------------------\n"
+RUN_POLICY="macaron verify-policy"
+POLICY_FILE=$WORKSPACE/tests/policy_engine/resources/policies/example-maven-project/policy.dl
+POLICY_RESULT=$WORKSPACE/output/policy_report.json
+POLICY_EXPECTED=$WORKSPACE/tests/policy_engine/expected_results/example-maven-project/example_maven_project_policy_report.json
+VSA_RESULT=$WORKSPACE/output/vsa.intoto.jsonl
+VSA_PAYLOAD_EXPECTED=$WORKSPACE/tests/vsa/integration/local_witness_example-maven-project/vsa_payload.json
+EXPECTATION_FILE=$WORKSPACE/tests/slsa_analyzer/provenance/expectations/cue/resources/valid_expectations/example-maven-project.cue
+PROVENANCE_FILE=$WORKSPACE/tests/slsa_analyzer/provenance/resources/valid_provenances/example-maven-project.json
+
+# Cloning the repository locally
+git clone https://github.com/behnazh-w/example-maven-app.git $WORKSPACE/output/git_repos/local_repos/example-maven-app || log_fail
+
+$RUN_MACARON analyze -pf $PROVENANCE_FILE -pe $EXPECTATION_FILE -purl pkg:maven/io.github.behnazh-w.demo/example-maven-app@1.0-SNAPSHOT?type=jar --repo-path example-maven-app --skip-deps || log_fail
+
+$RUN_POLICY -f $POLICY_FILE -d "$WORKSPACE/output/macaron.db" || log_fail
+
+check_or_update_expected_output $COMPARE_POLICIES $POLICY_RESULT $POLICY_EXPECTED || log_fail
+check_or_update_expected_output "$COMPARE_VSA" "$VSA_RESULT" "$VSA_PAYLOAD_EXPECTED" || log_fail
 
 # Testing the Repo Finder's remote calls.
 # This requires the 'packageurl' Python module
