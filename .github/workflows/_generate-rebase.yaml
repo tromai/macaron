@@ -23,9 +23,6 @@ on:
         required: true
         type: string
         description: Email address of said git user
-    secrets:
-      REPO_ACCESS_TOKEN:
-        required: true
 
 permissions:
   contents: read
@@ -39,7 +36,6 @@ jobs:
       uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
       with:
         fetch-depth: 0
-        token: ${{ secrets.REPO_ACCESS_TOKEN }}
         ref: ${{ github.ref_name }}
 
     - name: Do rebase

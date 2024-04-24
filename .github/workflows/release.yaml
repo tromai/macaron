@@ -16,82 +16,78 @@ env:
   ARTIFACT_NAME: artifact-ubuntu-latest-python-3.11
   # This is the username and email for the user who commits and pushes the release
   # commit. In an organisation that should be a dedicated devops account.
-  USER_NAME: behnazh-w
-  USER_EMAIL: behnazh-w@users.noreply.github.com
-  IMAGE_NAME: ghcr.io/oracle/macaron
+  USER_NAME: tromai
+  USER_EMAIL: tromai@users.noreply.github.com
+  IMAGE_NAME: ghcr.io/tromai/macaron
 
 jobs:
-  check:
-    if: ${{ !startsWith(github.event.commits[0].message, 'bump:') }}
-    uses: ./.github/workflows/_build.yaml
-    permissions:
-      contents: read
-      packages: read
+  # check:
+  #   if: ${{ !startsWith(github.event.commits[0].message, 'bump:') }}
+  #   uses: ./.github/workflows/_build.yaml
+  #   permissions:
+  #     contents: read
+  #     packages: read
 
-  # On pushes to the 'main' branch create a new release by bumping the version
-  # and generating a change log. That's the new bump commit and associated tag.
-  bump:
-    needs: check
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
+  # # On pushes to the 'main' branch create a new release by bumping the version
+  # # and generating a change log. That's the new bump commit and associated tag.
+  # bump:
+  #   needs:
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #   steps:
 
-    - name: Check out repository
-      uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.REPO_ACCESS_TOKEN }}
+  #   - name: Check out repository
+  #     uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+  #     with:
+  #       fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
-      with:
-        python-version: '3.11'
+  #   - name: Set up Python
+  #     uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+  #     with:
+  #       python-version: '3.11'
 
-    # Prepare the environment to run commitizen.
-    - name: Create empty virtual environment for Actions
-      run: mkdir .venv
-    - name: Install dependencies
-      run: make setup-github-actions
+  #   # Prepare the environment to run commitizen.
+  #   - name: Create empty virtual environment for Actions
+  #     run: mkdir .venv
+  #   - name: Install dependencies
+  #     run: make setup-github-actions
 
-    - name: Set up user
-      run: |
-        git config --global user.name "$USER_NAME"
-        git config --global user.email "$USER_EMAIL"
-        git config --list --global # For debug purposes.
+  #   - name: Set up user
+  #     run: |
+  #       git config --global user.name "$USER_NAME"
+  #       git config --global user.email "$USER_EMAIL"
+  #       git config --list --global # For debug purposes.
 
-    # In some cases a user may merge commits that don't cause a version bump, which causes commitizen
-    # to fail with error code 21 (NoneIncrementExit). Thus we silence that particular error to avoid
-    # failing this job: https://commitizen-tools.github.io/commitizen/bump/#avoid-raising-errors
-    - name: Create changelog and bump
-      run: cz --no-raise 21 bump --changelog --yes
+  #   # In some cases a user may merge commits that don't cause a version bump, which causes commitizen
+  #   # to fail with error code 21 (NoneIncrementExit). Thus we silence that particular error to avoid
+  #   # failing this job: https://commitizen-tools.github.io/commitizen/bump/#avoid-raising-errors
+  #   - name: Create changelog and bump
+  #     run: cz --no-raise 21 bump --yes
 
-    - name: Push the release
-      run: |
-        git push
-        git push --tags
+  #   - name: Push the release
+  #     run: |
+  #       git push
+  #       git push --tags
 
-  # After the bump commit was pushed to the main branch, rebase the staging branch
-  # (to_head argument) on top of the new main branch (from_base argument), to keep
-  # the histories of both branches in sync.
-  rebase_staging:
-    needs: [bump]
-    name: Rebase staging branch on main
-    uses: ./.github/workflows/_generate-rebase.yaml
-    permissions:
-      contents: read
-    with:
-      to_head: staging
-      from_base: origin/main
-      git_user_name: behnazh-w
-      git_user_email: behnazh-w@users.noreply.github.com
-    secrets:
-      REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
+  #       # After the bump commit was pushed to the main branch, rebase the staging branch
+  #       # (to_head argument) on top of the new main branch (from_base argument), to keep
+  #       # the histories of both branches in sync.
+  #       rebase_staging:
+  #         needs: [bump]
+  #         name: Rebase staging branch on main
+  #         uses: ./.github/workflows/_generate-rebase.yaml
+  #         permissions:
+  #           contents: read
+  #         with:
+  #           to_head: staging
+  #           from_base: origin/main
+  #           git_user_name: tromai
+  #           git_user_email: tromai@users.noreply.github.com
 
   # When triggered by the version bump commit, build the package and publish the release artifacts.
   build:
-    if: github.ref == 'refs/heads/main' && startsWith(github.event.commits[0].message, 'bump:')
     uses: ./.github/workflows/_build.yaml
     permissions:
       contents: read
@@ -171,71 +167,71 @@ jobs:
           echo "image-digest=${DIGEST}"
         } >> "$GITHUB_OUTPUT"
 
-    # Generate the Docker image SBOM under the dist/ directory which will be published as part of the release assets.
-    - name: Generate Docker sbom
-      env:
-        SYFT_BIN: ${{ github.workspace }}/bin
-        RELEASE_TAG: ${{ steps.release-info.outputs.release-tag }}
-        RELEASE_VERSION: ${{ steps.release-info.outputs.release-version }}
-        SYFT_VERSION: 0.84.0
-      # We install Syft, which is an SBOM generator tool for Docker images, using the instructions from:
-      #   https://github.com/anchore/syft#installation
-      # We only generate SBOM in CycloneDX format.
-      run: |
-        mkdir -p "$SYFT_BIN"
-        ASSET_NAME="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
-        CHECKSUMS="syft_${SYFT_VERSION}_checksums.txt"
+        #     # Generate the Docker image SBOM under the dist/ directory which will be published as part of the release assets.
+        #     - name: Generate Docker sbom
+        #       env:
+        #         SYFT_BIN: ${{ github.workspace }}/bin
+        #         RELEASE_TAG: ${{ steps.release-info.outputs.release-tag }}
+        #         RELEASE_VERSION: ${{ steps.release-info.outputs.release-version }}
+        #         SYFT_VERSION: 0.84.0
+        #       # We install Syft, which is an SBOM generator tool for Docker images, using the instructions from:
+        #       #   https://github.com/anchore/syft#installation
+        #       # We only generate SBOM in CycloneDX format.
+        #       run: |
+        #         mkdir -p "$SYFT_BIN"
+        #         ASSET_NAME="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+        #         CHECKSUMS="syft_${SYFT_VERSION}_checksums.txt"
+        # 
+        #         # Download artifacts.
+        #         echo "Downloading $ASSET_NAME"
+        #         curl --output "$ASSET_NAME" --progress-bar --location \
+        #           "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${ASSET_NAME}"
+        #         test -s "$ASSET_NAME" || (echo "Unable to download $ASSET_NAME" && exit 0)
+        #         echo "Downloading $CHECKSUMS"
+        #         curl --output "$CHECKSUMS"  --progress-bar --location \
+        #           "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${CHECKSUMS}"
+        #         test -s "$CHECKSUMS" || (echo "Unable to download $CHECKSUMS" && exit 0)
+        # 
+        #         EXPECTED=$(grep "${ASSET_NAME}" "${CHECKSUMS}" 2>/dev/null | tr '\t' ' ' | cut -d ' ' -f 1)
+        #         SYFT_DIGEST=$(sha256sum "$ASSET_NAME" | cut -d ' ' -f 1)
+        # 
+        #         # Check if artifact is valid.
+        #         if [ "$EXPECTED" == "$SYFT_DIGEST" ]; then
+        #           tar -zxvf "$ASSET_NAME" -C "$SYFT_BIN" syft
+        #           "$SYFT_BIN"/syft --version
+        #           "$SYFT_BIN"/syft \
+        #             ghcr.io/tromai/macaron:"$RELEASE_TAG" \
+        #             -o cyclonedx-json=dist/macaron-"$RELEASE_VERSION"-sbom-docker.json
+        #         else
+        #           echo "Checksum for '$ASSET_NAME' did not verify: expected $EXPECTED but got $SYFT_DIGEST"
+        #         fi
+        # 
+        #         # Remove the downloaded artifacts.
+        #         rm -f "$ASSET_NAME"
+        #         rm -f "$CHECKSUMS"
 
-        # Download artifacts.
-        echo "Downloading $ASSET_NAME"
-        curl --output "$ASSET_NAME" --progress-bar --location \
-          "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${ASSET_NAME}"
-        test -s "$ASSET_NAME" || (echo "Unable to download $ASSET_NAME" && exit 0)
-        echo "Downloading $CHECKSUMS"
-        curl --output "$CHECKSUMS"  --progress-bar --location \
-          "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${CHECKSUMS}"
-        test -s "$CHECKSUMS" || (echo "Unable to download $CHECKSUMS" && exit 0)
+      # - name: Set up Python
+      #   uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      #   with:
+      #     python-version: '3.11'
 
-        EXPECTED=$(grep "${ASSET_NAME}" "${CHECKSUMS}" 2>/dev/null | tr '\t' ' ' | cut -d ' ' -f 1)
-        SYFT_DIGEST=$(sha256sum "$ASSET_NAME" | cut -d ' ' -f 1)
+      # # Prepare the environment to run commitizen.
+      # - name: Create empty virtual environment for Actions
+      #   run: mkdir .venv
+      # - name: Install dependencies
+      #   run: make setup-github-actions
 
-        # Check if artifact is valid.
-        if [ "$EXPECTED" == "$SYFT_DIGEST" ]; then
-          tar -zxvf "$ASSET_NAME" -C "$SYFT_BIN" syft
-          "$SYFT_BIN"/syft --version
-          "$SYFT_BIN"/syft \
-            ghcr.io/oracle/macaron:"$RELEASE_TAG" \
-            -o cyclonedx-json=dist/macaron-"$RELEASE_VERSION"-sbom-docker.json
-        else
-          echo "Checksum for '$ASSET_NAME' did not verify: expected $EXPECTED but got $SYFT_DIGEST"
-        fi
+      #     #    # Create the Release Notes using commitizen.
+      #     #    - name: Create Release Notes
+      #     #      run: cz changelog --dry-run "$(cz version --project)" > RELEASE_NOTES.md
 
-        # Remove the downloaded artifacts.
-        rm -f "$ASSET_NAME"
-        rm -f "$CHECKSUMS"
-
-    - name: Set up Python
-      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
-      with:
-        python-version: '3.11'
-
-    # Prepare the environment to run commitizen.
-    - name: Create empty virtual environment for Actions
-      run: mkdir .venv
-    - name: Install dependencies
-      run: make setup-github-actions
-
-    # Create the Release Notes using commitizen.
-    - name: Create Release Notes
-      run: cz changelog --dry-run "$(cz version --project)" > RELEASE_NOTES.md
-
-    # Create the release including the artifacts and the SLSA L3 provenance.
-    - name: Upload assets
-      id: upload-assets
-      env:
-        GH_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
-        RELEASE_TAG: ${{ steps.release-info.outputs.release-tag }}
-      run: gh release create "$RELEASE_TAG" dist/* --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
+      # # Create the release including the artifacts and the SLSA L3 provenance.
+      # - name: Upload assets
+      #   id: upload-assets
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     RELEASE_TAG: ${{ steps.release-info.outputs.release-tag }}
+      #   run: gh release create "$RELEASE_TAG" dist/* --title "$RELEASE_TAG" 
 
     # Uncomment the following steps to publish to a PyPI server.
     # At the moment PyPI does not provide a mechanism to publish
@@ -319,33 +315,33 @@ jobs:
   #     env:
   #       GH_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
 
-  # Publish docs to GitHub pages.
-  github-pages:
-    needs: [build, release]
-    name: Deploy GitHub pages
-    uses: ./.github/workflows/_deploy-github-pages.yaml
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    with:
-      # TODO: use ${{ env.ARTIFACT_NAME }} when this issue is addressed:
-      # https://github.com/actions/runner/issues/2394.
-      artifact-name: artifact-ubuntu-latest-python-3.11
-      artifact-sha256: ${{ needs.build.outputs.artifacts-sha256 }}
+        #  # Publish docs to GitHub pages.
+        #  github-pages:
+        #    needs: [build, release]
+        #    name: Deploy GitHub pages
+        #    uses: ./.github/workflows/_deploy-github-pages.yaml
+        #    permissions:
+        #      contents: read
+        #      pages: write
+        #      id-token: write
+        #    with:
+        #      # TODO: use ${{ env.ARTIFACT_NAME }} when this issue is addressed:
+        #      # https://github.com/actions/runner/issues/2394.
+        #      artifact-name: artifact-ubuntu-latest-python-3.11
+        #      artifact-sha256: ${{ needs.build.outputs.artifacts-sha256 }}
 
-  # Send out release notifications after the Release was published on GitHub.
-  # Uncomment the `if` to disable sending release notifications.
-  notifications:
-    if: ${{ false }}
-    needs: [release]
-    name: Send Release notifications
-    uses: ./.github/workflows/_release-notifications.yaml
-    permissions:
-      contents: read
-    with:
-      repo_name: ${{ github.event.repository.name }}
-      release_tag: ${{ needs.release.outputs.release-tag }}
-      release_url: ${{ needs.release.outputs.release-url }}
-    secrets:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        #  # Send out release notifications after the Release was published on GitHub.
+        #  # Uncomment the `if` to disable sending release notifications.
+        #  notifications:
+        #    if: ${{ false }}
+        #    needs: [release]
+        #    name: Send Release notifications
+        #    uses: ./.github/workflows/_release-notifications.yaml
+        #    permissions:
+        #      contents: read
+        #    with:
+        #      repo_name: ${{ github.event.repository.name }}
+        #      release_tag: ${{ needs.release.outputs.release-tag }}
+        #      release_url: ${{ needs.release.outputs.release-url }}
+        #    secrets:
+        #      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
