@@ -18,6 +18,7 @@ COMPARE_JSON_OUT=$WORKSPACE/tests/e2e/compare_e2e_result.py
 COMPARE_POLICIES=$WORKSPACE/tests/policy_engine/compare_policy_reports.py
 COMPARE_VSA=$WORKSPACE/tests/vsa/compare_vsa.py
 UNIT_TEST_SCRIPT=$WORKSPACE/scripts/dev_scripts/test_run_macaron_sh.py
+MAKE_VENV="python -m venv"
 
 RESULT_CODE=0
 
@@ -101,6 +102,26 @@ JSON_RESULT=$WORKSPACE/output/reports/maven/apache/maven/maven.json
 $RUN_MACARON_SCRIPT analyze -purl pkg:maven/apache/maven -rp https://github.com/apache/maven -b master -d 3fc399318edef0d5ba593723a24fff64291d6f9b --skip-deps || log_fail
 
 python $COMPARE_JSON_OUT $JSON_RESULT $JSON_EXPECTED || log_fail
+
+echo -e "\n----------------------------------------------------------------------------------"
+echo "pkg:pypi/django@5.0.6: Analyzing the dependencies with virtual env provided as input."
+echo -e "----------------------------------------------------------------------------------\n"
+# Prepare the virtual environment.
+VIRTUAL_ENV_PATH=$WORKSPACE/.django_venv
+$MAKE_VENV "$VIRTUAL_ENV_PATH"
+"$VIRTUAL_ENV_PATH"/bin/pip install django==5.0.6
+$RUN_MACARON_SCRIPT analyze -purl pkg:pypi/django@5.0.6 --python-venv "$VIRTUAL_ENV_PATH" || log_fail
+
+# Check the dependencies using the policy engine.
+POLICY_FILE=$WORKSPACE/tests/policy_engine/resources/policies/django/test_dependencies.dl
+POLICY_RESULT=$WORKSPACE/output/policy_report.json
+POLICY_EXPECTED=$WORKSPACE/tests/policy_engine/expected_results/django/test_dependencies.json
+
+$RUN_MACARON_SCRIPT verify-policy -f "$POLICY_FILE" -d "$WORKSPACE/output/macaron.db" || log_fail
+python $COMPARE_POLICIES $POLICY_RESULT $POLICY_EXPECTED || log_fail
+
+# Clean up and remove the virtual environment.
+rm -rf "$VIRTUAL_ENV_PATH"
 
 echo -e "\n----------------------------------------------------------------------------------"
 echo "urllib3/urllib3: Analyzing the repo path when automatic dependency resolution is skipped."
