@@ -60,7 +60,7 @@ jobs:
     # Build the Docker image without pushing it.
     - name: Build the Docker image
       env:
-        IMAGE_NAME: ghcr.io/oracle/macaron
+        IMAGE_NAME: ghcr.io/tromai/macaron
       run: make build-docker
 
     - name: Install dependencies for integration test utility

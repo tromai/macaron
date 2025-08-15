@@ -22,8 +22,8 @@ ENV HOME="/home/macaron" \
     # The GPG key to verify the source tar ball following the instructions in https://www.python.org/downloads/
     PYTHON_SOURCE_GPG="A035C8C19219BA821ECEA86B64E628F8D684696D" \
     # Setting Java related environment variables.
-    JAVA_HOME="/usr/lib/jvm/jdk-17-oracle-x64" \
-    PATH=/usr/local/bin:/usr/lib/jvm/jdk-17-oracle-x64/bin:$PATH
+    JAVA_HOME="/opt/jdk-17.0.12" \
+    PATH=/usr/local/bin:/opt/jdk-17.0.12/bin:$PATH
 
 # We run the installation of all components in one single RUN to minimize the final image size.
 RUN : \
@@ -72,11 +72,16 @@ enabled=1\
         ncurses-devel   \
         sqlite-devel    \
         zlib-devel      \
-        # Oracle JDK17
-        https://download.oracle.com/java/17/latest/jdk-17_linux-x64_bin.rpm \
     # Store the list of user installed packages to preserve them when we clean up unused packages.
     # https://dnf.readthedocs.io/en/latest/command_ref.html#history-command
     && USER_MANUAL_INSTALLED="$(dnf history userinstalled | tail -n +2)" \
+# ---------------------------------------------------------------------------------------------------------------------
+    # INSTALLING JAVA - Oracle JDK17
+    && dnf install -y wget \
+    && mkdir -p /opt \
+    && wget -O jdk-17.0.12_linux-x64_bin.tar.gz https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz \
+    && tar -xvf jdk-17.0.12_linux-x64_bin.tar.gz --directory /opt/ \
+    && rm jdk-17.0.12_linux-x64_bin.tar.gz \
 # ---------------------------------------------------------------------------------------------------------------------
     # INSTALL PYTHON FROM SOURCE.
     # We enable the ol9_core_ready_builder repo for the package gdbm-devel
@@ -107,7 +112,6 @@ enabled=1\
         readline-devel  \
         sqlite-devel    \
         tk-devel        \
-        wget            \
         xz              \
         xz-devel        \
         zlib-devel      \
